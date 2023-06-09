@@ -3,12 +3,13 @@ from setuptools import setup, find_packages
 setup(
   name = 'augshufflenet-pytorch',
   packages = find_packages(exclude=[]),
-  version = '0.0.1',
+  version = '0.0.2',
   license='MIT',
   description = 'AugShuffleNet: Communicate More, Compute Less - Pytorch',
   author = 'Ferris Kwaijtaal',
   author_email = 'ferris+gh@devdroplets.com',
-  long_description_content_type = 'text/markdown',
+  long_description_content_type='text/markdown',
+  long_description=open('README.md', 'r').read(),
   url = 'https://github.com/i404788/augshufflenet-pytorch',
   keywords = [
     'artificial intelligence',
