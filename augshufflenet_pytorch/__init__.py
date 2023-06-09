@@ -70,11 +70,12 @@ class AugShuffleBlock(nn.Module):
         super().__init__()
 
         assert 0 < r <= 1, "r is a ratio"
+        assert oup % 2 == 0, "Output channels needs to be divisible by 2"
+        self.r = r
         self.bcf = branch_conv_features = int(oup * self.r)
         self.bbf = branch_bank_features = oup - branch_conv_features
         assert self.bcf % 2 == 0 and self.bbf % 2 == 0, f"Resulting features of each branch needs to be divisable by 2 ({self.bcf}, {self.bbf})"
 
-        self.r = r
         self.branch2 = nn.Sequential(
             nn.Conv2d(
                 branch_conv_features,
@@ -92,8 +93,8 @@ class AugShuffleBlock(nn.Module):
 
         # M2: banch Conv1x1
         self.branch3 = nn.Sequential(
-            nn.Conv2d(branch_conv_features, branch_conv_features, kernel_size=1, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(branch_conv_features),
+            nn.Conv2d(oup//2, oup//2, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(oup//2),
             nn.ReLU(inplace=True),
         )
 
@@ -132,10 +133,8 @@ class AugShuffleNet(nn.Module):
     ) -> None:
         super().__init__()
 
-        if len(stages_repeats) != 3:
-            raise ValueError("expected stages_repeats as list of 3 positive ints")
-        if len(stages_out_channels) != 5:
-            raise ValueError("expected stages_out_channels as list of 5 positive ints")
+        if len(stages_out_channels) != len(stages_repeats)+1:
+            raise ValueError(f"expected stages_out_channels as list of {len(stages_repeats)+1=} positive ints")
         self._stage_out_channels = stages_out_channels
 
         output_channels = self._stage_out_channels[0]
@@ -148,16 +147,13 @@ class AugShuffleNet(nn.Module):
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        # Static annotations for mypy
-        self.stage2: nn.Sequential
-        self.stage3: nn.Sequential
-        self.stage4: nn.Sequential
-        stage_names = [f"stage{i}" for i in [2, 3, 4]]
+        self.stages = nn.ModuleList([])
+        stage_names = [f"stage{i+2}" for i in range(len(stages_repeats))]
         for name, repeats, output_channels in zip(stage_names, stages_repeats, self._stage_out_channels[1:]):
             seq = [ShuffleStrided(input_channels, output_channels, 2)]
             for i in range(repeats - 1):
                 seq.append(AugShuffleBlock(output_channels, output_channels))
-            setattr(self, name, nn.Sequential(*seq))
+            self.stages.append(nn.Sequential(*seq))
             input_channels = output_channels
 
         output_channels = self._stage_out_channels[-1]
@@ -171,9 +167,8 @@ class AugShuffleNet(nn.Module):
         # See note [TorchScript super()]
         x = self.conv1(x)
         x = self.maxpool(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
+        for stage in self.stages:
+            x = stage(x)
         x = self.conv5(x)
         x = x.mean([2, 3])  # globalpool
         return x
@@ -184,14 +179,14 @@ class AugShuffleNet(nn.Module):
 
 class AugShuffleNet0_5x(AugShuffleNet):
     def __init__(self, input_channels=3):
-        super().__init__([3, 7, 3], [48, 96, 192], input_channels=input_channels)
+        super().__init__([3, 7, 3], [24, 48, 96, 192], input_channels=input_channels)
 
 
 class AugShuffleNet1_0x(AugShuffleNet):
     def __init__(self, input_channels=3):
-        super().__init__([3, 7, 3], [120, 240, 480], input_channels=input_channels)
+        super().__init__([3, 7, 3], [24, 128, 256, 512], input_channels=input_channels)
 
 
 class AugShuffleNet1_5x(AugShuffleNet):
     def __init__(self, input_channels=3):
-        super().__init__([3, 7, 3], [176, 352, 704], input_channels=input_channels)
+        super().__init__([3, 7, 3], [24, 176, 352, 704], input_channels=input_channels)

@@ -1,18 +1,20 @@
 # AugShuffleNet: Communicate More, Compute Less
 
+AugShuffle1_0x has slightly different channels than the paper due to constraints in of the default `r`.
+
 See: <https://arxiv.org/abs/2203.06589>
 
 ## Usage
 ```
 import torch
-from augshufflenet_pytorch import AugShuffleNet0_5x, AugShuffleNet1_0x, AugShuffletNet1_5x, AugShuffleNet
+from augshufflenet_pytorch import AugShuffleNet0_5x, AugShuffleNet1_0x, AugShuffleNet1_5x, AugShuffleNet
 
 
 model = AugShuffleNet0_5x(input_channels=3)
 x = model(torch.randn(1, 3, 64, 64)) # [1, 192]
 
 # Equivalent to 0_5x
-model = AugShuffleNet1_0x(stages_repeat=[3, 7, 3], stages_out_channels=[48, 96, 192], input_channels=3, r=0.375)
+model = AugShuffleNet(stages_repeats=[3, 7, 3], stages_out_channels=[24, 48, 96, 192], input_channels=3, r=0.375)
 x = model(torch.randn(1, 3, 64, 64)) # [1, 192]
 ```
 
