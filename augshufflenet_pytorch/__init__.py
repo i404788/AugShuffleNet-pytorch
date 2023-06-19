@@ -18,7 +18,7 @@ def channel_shuffle(x: Tensor, groups: int) -> Tensor:
 
 
 class ShuffleStrided(nn.Module):
-    def __init__(self, inp: int, oup: int, stride: int = 2) -> None:
+    def __init__(self, inp: int, oup: int, stride: int = 2, norm=nn.BatchNorm2d) -> None:
         super().__init__()
 
         if not (2 <= stride <= 3):
@@ -29,9 +29,9 @@ class ShuffleStrided(nn.Module):
 
         self.branch1 = nn.Sequential(
             self.depthwise_conv(inp, inp, kernel_size=3, stride=self.stride, padding=1),
-            nn.BatchNorm2d(inp),
+            norm(inp),
             nn.Conv2d(inp, branch_features, kernel_size=1, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(branch_features),
+            norm(branch_features),
             nn.ReLU(inplace=True),
         )
 
@@ -44,12 +44,12 @@ class ShuffleStrided(nn.Module):
                 padding=0,
                 bias=False,
             ),
-            nn.BatchNorm2d(branch_features),
+            norm(branch_features),
             nn.ReLU(inplace=True),
             self.depthwise_conv(branch_features, branch_features, kernel_size=3, stride=self.stride, padding=1),
-            nn.BatchNorm2d(branch_features),
+            norm(branch_features),
             nn.Conv2d(branch_features, branch_features, kernel_size=1, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(branch_features),
+            norm(branch_features),
             nn.ReLU(inplace=True),
         )
 
@@ -66,7 +66,7 @@ class ShuffleStrided(nn.Module):
 
 
 class AugShuffleBlock(nn.Module):
-    def __init__(self, inp: int, oup: int, r: float = 0.375) -> None:
+    def __init__(self, inp: int, oup: int, r: float = 0.375, norm=nn.BatchNorm2d) -> None:
         super().__init__()
 
         assert 0 < r <= 1, "r is a ratio"
@@ -85,16 +85,16 @@ class AugShuffleBlock(nn.Module):
                 padding=0,
                 bias=False,
             ),
-            nn.BatchNorm2d(branch_conv_features),
+            norm(branch_conv_features),
             # M3: nn.ReLU(inplace=True),
             self.depthwise_conv(branch_conv_features, branch_conv_features, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(branch_conv_features)
+            norm(branch_conv_features)
         )
 
         # M2: banch Conv1x1
         self.branch3 = nn.Sequential(
             nn.Conv2d(oup//2, oup//2, kernel_size=1, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(oup//2),
+            norm(oup//2),
             nn.ReLU(inplace=True),
         )
 
@@ -129,7 +129,8 @@ class AugShuffleNet(nn.Module):
         stages_repeats: list[int],
         stages_out_channels: list[int],
         input_channels: int = 3,
-        r: float = 0.375
+        r: float = 0.375,
+        norm=nn.BatchNorm2d
     ) -> None:
         super().__init__()
 
@@ -140,7 +141,7 @@ class AugShuffleNet(nn.Module):
         output_channels = self._stage_out_channels[0]
         self.conv1 = nn.Sequential(
             nn.Conv2d(input_channels, output_channels, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(output_channels),
+            norm(output_channels),
             nn.ReLU(inplace=True),
         )
         input_channels = output_channels
@@ -150,16 +151,16 @@ class AugShuffleNet(nn.Module):
         self.stages = nn.ModuleList([])
         stage_names = [f"stage{i+2}" for i in range(len(stages_repeats))]
         for name, repeats, output_channels in zip(stage_names, stages_repeats, self._stage_out_channels[1:]):
-            seq = [ShuffleStrided(input_channels, output_channels, 2)]
+            seq = [ShuffleStrided(input_channels, output_channels, 2, norm=norm)]
             for i in range(repeats - 1):
-                seq.append(AugShuffleBlock(output_channels, output_channels))
+                seq.append(AugShuffleBlock(output_channels, output_channels, norm=norm))
             self.stages.append(nn.Sequential(*seq))
             input_channels = output_channels
 
         output_channels = self._stage_out_channels[-1]
         self.conv5 = nn.Sequential(
             nn.Conv2d(input_channels, output_channels, 1, 1, 0, bias=False),
-            nn.BatchNorm2d(output_channels),
+            norm(output_channels),
             nn.ReLU(inplace=True),
         )
 
